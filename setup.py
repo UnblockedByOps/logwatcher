@@ -21,7 +21,7 @@ with open(os.path.join(here, 'README.rst')) as f:
 with open(os.path.join(here, 'CHANGELOG.rst')) as f:
     CHANGELOG = f.read()
 
-setup(name='logwatcher',
+setup(name='LogWatcher',
       version='1.0',
       description='LogWatcher Daemon',
       long_description=README + '\n\n' + CHANGELOG,
