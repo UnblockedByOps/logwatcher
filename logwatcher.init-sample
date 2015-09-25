@@ -1,0 +1,123 @@
+#!/bin/sh
+#
+# Copyright 2015 CityGrid Media, LLC
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+#
+# init script for logwatcher.py
+# Looks in the defined config_dir and starts an intstance for any files
+# matching the name logwatcher_*.ini
+#
+# chkconfig: 3 99 00
+# description: logwatcher.py - report on access logs on the fly
+
+
+# Configure these
+bin_dir="/app/logwatcher/bin"
+config_dir="/app/logwatcher/etc"
+lw="python2.7 ${bin_dir}/logwatcher.py"
+lw_user=csweb
+
+# initialize other variables
+class=`hostname | sed 's/^.......\([a-z]*\)[0-9]*$/\1/'`
+errors=0
+
+
+if [ -d $config_dir ]; then
+        config_files=`ls $config_dir/logwatcher_*.ini`
+else
+        echo 'Logwatcher Configuration directory ($config_dir) does not exist.'
+        exit 1;
+fi
+
+if [ ! "$config_files" ]; then
+        echo 'There do not appear to be any valid Logwatcher Configuration Files deployed.'
+        exit 1;
+fi
+
+
+# start, restart, status, stop
+case $1 in
+   start)
+        for cf in $config_files; do
+          pid=`ps auxww | egrep py[t]hon.*$cf | awk '{ print $2 }'`
+          if [ "x$pid" != "x" ]; then
+             echo 'logwatcher is running!'
+             exit 1
+          fi
+        done
+
+        for cf in $config_files; do
+           echo "$lw -d -c $cf"
+           su -c "$lw -d -c $cf" $lw_user
+        done
+   ;;
+   restart)
+        $0 stop
+        $0 start
+   ;;
+   # FIXME: Will need to do a better of status when checking multiple logwatcher configuration files
+   status)
+        for cf in $config_files; do
+          pid=`ps auxww | egrep py[t]hon.*logwatcher.*.ini | awk '{ print $2 }'`
+          if [ "x$pid" != "x" ]; then
+             echo 'logwatcher is running!'
+             exit 0;
+          fi
+        done
+        echo 'logwatcher is not running!'
+        exit 1;
+   ;;
+   stop)
+        pids=`ps auxww | egrep py[t]hon.*logwatcher.*.ini | awk '{ print $2 }'`
+        for p in $pids; do
+           if [ "x$p" != "x" ]; then
+              echo stopping $p
+              su -c "kill $p" $lw_user
+              echo stopped $p
+              if [ $? = 0 ]; then
+                 echo looking for pid file
+                 for cf in $config_files; do
+                        pidfile=`egrep "^pidfile: " $cf | awk '{ print $2 }'`
+                        if [ -f "$pidfile" ]; then
+                                echo found pid file
+                                su -c "rm $pidfile" $lw_user
+                                if [ $? != 0 ]; then
+                                        echo "ERROR: $0: couldn't remove $pidfile"
+                                        errors=`expr $errors + 1`
+                                fi
+                        fi
+                 done
+              fi
+           fi
+        done
+   ;;
+   *)    
+        echo "Usage: $0 (start|stop|restart|status)"
+   ;;
+esac
+
+exit $errors
+
+
+
+
+# CONFIGS:
+#
+#Chostname ini_name [ini_name ...]
+#
+#Cesh esh_events esh_roundup
+#Cssa ss_data ss_query
+#Cssb ss_data ss_query
+#Cssc ss_data ss_query
