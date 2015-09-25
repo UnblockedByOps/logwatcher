@@ -41,7 +41,6 @@ setup(name='LogWatcher',
       include_package_data=True,
       zip_safe=False,
       install_requires=requires,
-      dependency_links=dependency_links,
       tests_require=requires,
       test_suite="logwatcher",
       )
