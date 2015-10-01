@@ -1,0 +1,4 @@
+This is a legacy location for plugins.  Plugins should be created as independent projects
+and deployed individually. Perferably as a python package.  These Plugins are known to
+work however you would need to adjust the logwatcher code to find them if you do not deploy
+them into your already configured PYTHONPATH.
