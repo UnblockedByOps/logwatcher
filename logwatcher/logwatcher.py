@@ -19,7 +19,7 @@
 import time,os,re,sys,atexit,ConfigParser
 import signal
 
-code_version="$Id: newlogwatcher.py 233274 2014-06-23 23:20:52Z heitritterw $";
+code_version="$Id: logwatcher.py 233274 2014-06-23 23:20:52Z heitritterw $";
 
 class LogWatcher:
 	def __init__(self, pidfile=None, daemonize=0, configfile=None, distinguisher=None, debug=0, quit=False, beginning=False, testconfig=False, graphite_server=None, use_graphite=False):
@@ -156,7 +156,7 @@ class LogWatcher:
 	def readConfig(self):
 		if self.debug:
 			print >> sys.stderr, "DEBUG: readconfig() called"
-		sec="newlogwatcher"
+		sec="logwatcher"
 
 		if self.configfile == None:
 			return 0
