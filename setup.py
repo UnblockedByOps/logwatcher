@@ -24,7 +24,7 @@ with open(os.path.join(here, 'CHANGELOG.rst')) as f:
 requires = []
 
 setup(name='LogWatcher',
-      version='1.0',
+      version='1.1',
       description='LogWatcher Daemon',
       long_description=README + '\n\n' + CHANGELOG,
       classifiers=[
