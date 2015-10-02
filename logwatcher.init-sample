@@ -24,7 +24,7 @@
 
 
 # Configure these
-bin_dir="/app/logwatcher/bin"
+bin_dir="/usr/lib/python2.7/site-packages"
 config_dir="/app/logwatcher/etc"
 lw="python2.7 ${bin_dir}/logwatcher.py"
 lw_user=csweb
