@@ -750,25 +750,25 @@ class LogWatcher:
 					ValueError, TypeError
 					if bit[:2] == "s/":
 						try:
-							value=self.metric_sums[bit[2:]]
+							value=float(self.metric_sums[bit[2:]])
 						except:
 							self.send_warning("in parse_expression() value for %s not found" % bit)
-							value=0
+							value=float(0)
 					elif bit[:2] == "c/":
 						try:
-							value=self.metric_counts[bit[2:]]
+							value=float(self.metric_counts[bit[2:]])
 						except:
 							self.send_warning("in parse_expression() value for %s not found" % bit)
 							print self.metric_counts.keys()
-							value=0
+							value=float(0)
 					# allow any object property to be used
 					elif bit[:2] == "i/":
 						try:
-							value=getattr(self,bit[2:])
+							value=float(getattr(self,bit[2:]))
 						except:
 							self.send_warning("in parse_expression() value for %s not found" % bit)
-							value=0
-					elif bit in ('/', '+', '-', '*'):
+							value=float(0)
+					elif bit in ('/', '+', '-', '*', '(', ')'):
 						value=bit
 					else:
 						value="_unknown_"
