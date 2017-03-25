@@ -1145,9 +1145,9 @@ def parse_args():
     '''Parse all the command line arguments.'''
 
     help_desc = '''
-    Watch logs and send them to graphite.
+    Watch logs for configured metrics and send them to graphite.
 
-    >>> lw_daemon.py -D -V -c /app/logwatcher/conf/logwatcher.ini -b -g graphite
+    >>> logwatcher.py -D -V -c /app/logwatcher/conf/logwatcher.ini -b -g graphite
     readlines()
     '''
 
