@@ -39,7 +39,8 @@ class gMetric:
         self.debug = debug # 0 == send, 1 == print, 2 == print+send
         self.__buffer = ""
         self.server = graphite_server
-        self.port = 2003
+        # FIXME: port needs to be configurable
+        self.port = 3003
 
 
     # FIXME: What is the difference between these two methods?
@@ -87,7 +88,8 @@ class gMetric:
             self.__buffer = ""
 
 
-def sendMetrics(data, server, port=2003):
+# FIXME: port needs to be configurable
+def sendMetrics(data, server, port=3003):
         print "SENDING: %s" % data
         try:
             sock = socket.socket()

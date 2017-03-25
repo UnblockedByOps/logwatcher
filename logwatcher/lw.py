@@ -26,16 +26,16 @@ import signal
 
 CODE_VERSION = "$Id: logwatcher.py 233274 2014-06-23 23:20:52Z heitritterw $"
 
-class LogWatcher:
-    '''Main logwatcher class'''
+class LogWatcher(object):
+    '''Main logwatcher class.'''
 
     def __init__(self,
                  pidfile=None,
-                 daemonize=0,
+                 daemonize=False,
                  configfile=None,
                  distinguisher=None,
                  debug=0,
-                 quit=False,
+                 quit_eof=False,
                  beginning=False,
                  testconfig=False,
                  graphite_server=None,
@@ -78,7 +78,7 @@ class LogWatcher:
         self.debug = debug
         self.pidfile = pidfile
         self.distinguisher = distinguisher
-        self.quit = quit
+        self.quit_eof = quit_eof
         self.beginning = beginning
         self.testconfig = testconfig
 
@@ -101,8 +101,8 @@ class LogWatcher:
         self.daemonize = daemonize
 
         if self.getPID() < 1:
-            if self.daemonize == 1:
-                procdaemonize()
+            if self.daemonize:
+                self.procdaemonize()
 
         if self.lockPID() == 0:
             print "Pidfile found"
@@ -318,7 +318,7 @@ class LogWatcher:
             self.regex["processing_time"] = re.compile(cp.get(sec, "processing_time_regex"))
             self.processing_time_units = cp.get(sec, "processing_time_units")
 
-            self.use_brand=0
+            self.use_brand = 0
             try:
                 use_brand = int(cp.get(sec, "use_brand"))
                 if use_brand == 1:
@@ -783,7 +783,7 @@ class LogWatcher:
         else:
             self.gmetric["NOTIFY_TIME"].send(self.notify_time, 1)
 
-        if self.quit:
+        if self.quit_eof:
             print "Metrics complete."
             sys.exit(0)
 
@@ -1091,133 +1091,36 @@ class LogWatcher:
             self.log_time += time.time() - self.log_time_start
 
 
-def handleSignal(signum, frame):
-    print "\nLogWatcher killed"
-    sys.exit(signum)
+    def procdaemonize(self, stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
+        # Do first fork.
+        try:
+            pid = os.fork()
+            if pid > 0:
+                sys.exit(0) # Exit first parent.
+        except OSError, e:
+            sys.stderr.write("fork #1 failed: (%d) %s\n" % (e.errno, e.strerror))
+            sys.exit(1)
 
-def procdaemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
-    # Do first fork.
-    try:
-        pid = os.fork()
-        if pid > 0:
-            sys.exit(0) # Exit first parent.
-    except OSError, e:
-        sys.stderr.write("fork #1 failed: (%d) %s\n" % (e.errno, e.strerror))
-        sys.exit(1)
+        # Decouple from parent environment.
+        os.chdir("/")
+        os.umask(0)
+        os.setsid()
 
-    # Decouple from parent environment.
-    os.chdir("/")
-    os.umask(0)
-    os.setsid()
+        # Do second fork.
+        try:
+            pid = os.fork()
+            if pid > 0:
+                sys.exit(0) # Exit second parent.
+        except OSError, e:
+            sys.stderr.write("fork #2 failed: (%d) %s\n" % (e.errno, e.strerror))
+            sys.exit(1)
 
-    # Do second fork.
-    try:
-        pid = os.fork()
-        if pid > 0:
-            sys.exit(0) # Exit second parent.
-    except OSError, e:
-        sys.stderr.write("fork #2 failed: (%d) %s\n" % (e.errno, e.strerror))
-        sys.exit(1)
+        # Now I am a daemon!
 
-    # Now I am a daemon!
-
-    # Redirect standard file descriptors.
-    si = file(stdin, 'r')
-    so = file(stdout, 'a+')
-    se = file(stderr, 'a+', 0)
-    os.dup2(si.fileno(), sys.stdin.fileno())
-    os.dup2(so.fileno(), sys.stdout.fileno())
-    os.dup2(se.fileno(), sys.stderr.fileno())
-
-def usage():
-    print "usage: %s [-h] [-v] [-D] [-V] [-d] [ -c configfile ] [-i <distinguisher>] [-p <pidfile>] [-q] [-b] [-t]" % sys.argv[0]
-    print "  -h --help                Print this message"
-    print "  -v --version             Print the version"
-    print "  -D --debug               Don't send metrics, just print them"
-    print "  -g --graphite-server <s> Use graphite, with server <s>"
-    print "  -G --use-graphite        Use graphite, find server in /etc/graphite.conf"
-    print "  -V --verbose             Print gmetric commands as they're sent. Disables -D"
-    print "  -d --daemonize           Run in the background"
-    print "  -c --config <file>       Use the given configuration file"
-    print "  -i --distinguisher <dis> Use the given string in the metric names"
-    print "  -p --pidfile <file>      Store the PID in the given file"
-    print "  -q --quit                Quit after sending metrics (useful with -D)"
-    print "  -b --beginning           Read the log from the beginning (useful with -q)"
-    print "  -t --testconfig          Read overrides from the \"test\" section of the configuration file"
-
-def main(argv):
-    import getopt, sys
-    try:
-        opts, args = getopt.getopt(argv, "VDdg:Gvhpc:i:qbt", ["verbose",
-                                                              "debug",
-                                                              "daemonize",
-                                                              "graphite-server",
-                                                              "use-graphite",
-                                                              "version",
-                                                              "help",
-                                                              "pidfile=",
-                                                              "config=",
-                                                              "distinguisher=",
-                                                              "quit",
-                                                              "beginning",
-                                                              "testconfig"])
-    except:
-        usage()
-
-    pidfile = None
-    configfile = None
-    daemonize = 0
-    debug = 0
-    distinguisher = None
-    quit = False
-    beginning = False
-    testconfig = False
-    graphite_server = None
-    use_graphite = False
-
-    for opt, arg in opts:
-        if opt in ("-h", "--help"):
-            usage()
-            sys.exit(0)
-        if opt in ("-v", "--version"):
-            print CODE_VERSION
-            sys.exit(0)
-        if opt in ("-p", "--pidfile"):
-            pidfile = arg
-        if opt in ("-i", "--distinguisher"):
-            distinguisher = arg
-        if opt in ("-c", "--config"):
-            configfile = arg
-        if opt in ("-g", "--graphite-server"):
-            graphite_server = arg
-        if opt in ("-G", "--use-graphite"):
-            use_graphite = True
-        if opt in ("-d", "--daemonize"):
-            daemonize = 1
-        if opt in ("-D", "--debug"):
-            debug = 1
-        if opt in ("-V", "--verbose"):
-            debug = 2
-        if opt in ("-q", "--quit"):
-            quit = True
-        if opt in ("-b", "--beginning"):
-            beginning = True
-        if opt in ("-t", "--testconfig"):
-            testconfig = True
-
-    lw = LogWatcher(pidfile,
-                    daemonize,
-                    configfile,
-                    distinguisher,
-                    debug,
-                    quit,
-                    beginning,
-                    testconfig,
-                    graphite_server,
-                    use_graphite)
-
-if __name__ == "__main__":
-    signal.signal(signal.SIGINT, handleSignal)
-    main(sys.argv[1:])
-
-
+        # Redirect standard file descriptors.
+        si = file(stdin, 'r')
+        so = file(stdout, 'a+')
+        se = file(stderr, 'a+', 0)
+        os.dup2(si.fileno(), sys.stdin.fileno())
+        os.dup2(so.fileno(), sys.stdout.fileno())
+        os.dup2(se.fileno(), sys.stderr.fileno())
