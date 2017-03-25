@@ -77,6 +77,11 @@ def parse_args():
                      '--pidfile',
                      help='Store the PID in the given file',
                      default=None)
+    pap.add_argument('-R',
+                     '--prefix-root',
+                     dest='prefix_root',
+                     help='The prefix for all logwatcher metrics.',
+                     default='LW_')
     pap.add_argument('-q',
                      '--quit',
                      action='store_true',
@@ -124,7 +129,8 @@ def main():
                args.beginning,
                args.testconfig,
                args.graphite_server,
-               args.use_graphite)
+               args.use_graphite,
+               args.prefix_root)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_signal)

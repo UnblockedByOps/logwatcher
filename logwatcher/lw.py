@@ -39,7 +39,8 @@ class LogWatcher(object):
                  beginning=False,
                  testconfig=False,
                  graphite_server=None,
-                 use_graphite=False):
+                 use_graphite=False,
+                 prefix_root=None):
         self.log = ""
         self.fd = None
 
@@ -93,7 +94,7 @@ class LogWatcher(object):
         self.new_metric_count = 0 # counts new-found dynamic metrics
         self.total_metric_count = 0 # counts metrics sent
 
-        self.prefix_root = "LW_"
+        self.prefix_root = prefix_root
         self.prefix = self.prefix_root
         if self.distinguisher:
             self.prefix = "%s%s_" % (self.prefix, self.distinguisher)
