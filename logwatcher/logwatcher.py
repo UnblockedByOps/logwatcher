@@ -33,6 +33,7 @@ class LogWatcher(object):
     def __init__(self,
                  pidfile=None,
                  daemonize=False,
+                 daemon_log=None,
                  configfile=None,
                  distinguisher=None,
                  debug=0,
@@ -40,16 +41,23 @@ class LogWatcher(object):
                  beginning=False,
                  testconfig=False,
                  graphite_server=None,
+                 graphite_port=None,
                  use_graphite=False,
-                 prefix_root=None):
+                 prefix_root=None,
+                 metric_format=None):
+
         self.log = ""
         self.fd = None
 
         self.graphite_server = graphite_server
+        self.graphite_port = graphite_port
         if self.graphite_server:
             self.use_graphite = True
         else:
             self.use_graphite = use_graphite
+
+        self.daemon_log = daemon_log
+        self.metric_format = metric_format
 
         # initializing, will be populated later
         self.plugin_list = []
@@ -104,7 +112,9 @@ class LogWatcher(object):
 
         if self.getPID() < 1:
             if self.daemonize:
-                procdaemonize()
+                procdaemonize(self.daemon_log,
+                              self.daemon_log,
+                              self.daemon_log)
 
         if self.lockPID() == 0:
             print "Pidfile found"
@@ -134,78 +144,104 @@ class LogWatcher(object):
                                     "count",
                                     self.notify_schedule,
                                     self.graphite_server,
+                                    self.graphite_port,
+                                    self.metric_format,
                                     self.debug)
         self.gmetric["QPS"] = gMetric("float",
                                       "%sQPS" % self.prefix,
                                       "qps",
                                       self.notify_schedule,
                                       self.graphite_server,
+                                      self.graphite_port,
+                                      self.metric_format,
                                       self.debug)
         self.gmetric["APT"] = gMetric("float",
                                       "%sAvg_Processing_Time" % self.prefix,
                                       "seconds",
                                       self.notify_schedule,
                                       self.graphite_server,
+                                      self.graphite_port,
+                                      self.metric_format,
                                       self.debug)
         self.gmetric["MAX"] = gMetric("float",
                                       "%sMax_Processing_Time" % self.prefix,
                                       "seconds",
                                       self.notify_schedule,
                                       self.graphite_server,
+                                      self.graphite_port,
+                                      self.metric_format,
                                       self.debug)
         self.gmetric["TPT"] = gMetric("float",
                                       "%sTotal_Processing_Time" % self.prefix,
                                       "seconds",
                                       self.notify_schedule,
                                       self.graphite_server,
+                                      self.graphite_port,
+                                      self.metric_format,
                                       self.debug)
         self.gmetric["SLA"] = gMetric("float",
                                       "%sexceeding_SLA" % self.prefix,
                                       "percent",
                                       self.notify_schedule,
                                       self.graphite_server,
+                                      self.graphite_port,
+                                      self.metric_format,
                                       self.debug)
         self.gmetric["SLA_ct"] = gMetric("float",
                                          "%sexceeding_SLA_ct" % self.prefix,
                                          "percent",
                                          self.notify_schedule,
                                          self.graphite_server,
+                                         self.graphite_port,
+                                         self.metric_format,
                                          self.debug)
         self.gmetric["code_version"] = gMetric("string",
                                                "%sLW_Version" % self.prefix_root,
                                                "string",
                                                self.notify_schedule,
                                                self.graphite_server,
+                                               self.graphite_port,
+                                               self.metric_format,
                                                self.debug)
         self.gmetric["ignore"] = gMetric("float",
                                          "%signored" % self.prefix,
                                          "count",
                                          self.notify_schedule,
                                          self.graphite_server,
+                                         self.graphite_port,
+                                         self.metric_format,
                                          self.debug)
 
         self.gmetric["NOTIFY_TIME"] = gMetric("float",
                                               "%s%s" % (self.prefix_root, "LW_NotifyTime"),
                                               "seconds", self.notify_schedule,
                                               self.graphite_server,
+                                              self.graphite_port,
+                                              self.metric_format,
                                               self.debug)
         self.gmetric["LOG_TIME"] = gMetric("float",
                                            "%s%s" % (self.prefix_root, "LW_LogTime"),
                                            "seconds",
                                            self.notify_schedule,
                                            self.graphite_server,
+                                           self.graphite_port,
+                                           self.metric_format,
                                            self.debug)
         self.gmetric["NEW_METRICS"] = gMetric("float",
                                               "%s%s" % (self.prefix_root, "LW_NewMetrics"),
                                               "float",
                                               self.notify_schedule,
                                               self.graphite_server,
+                                              self.graphite_port,
+                                              self.metric_format,
                                               self.debug)
         self.gmetric["TOTAL_METRICS"] = gMetric("float",
                                                 "%s%s" % (self.prefix_root, "LW_TotalMetrics"),
                                                 "float",
                                                 self.notify_schedule,
                                                 self.graphite_server,
+                                                self.graphite_port,
+                                                self.metric_format,
                                                 self.debug)
 
         # use this for sub-hourly and other odd log rotation
@@ -408,7 +444,7 @@ class LogWatcher(object):
             except:
                 self.metric_cleaner = re.compile("[/.:;\"\' $=]")
 
-            # STUB need some error handling for ratios that don't exist
+            # FIXME: need some error handling for ratios that don't exist
 
         except Exception, e:
             print "failed to parse config file '%s'" % self.configfile
@@ -424,7 +460,6 @@ class LogWatcher(object):
             sys.exit(1)
         if self.testconfig:
             self.readTestConfig()
-
 
     def readGraphiteConf(self):
         '''Read graphite config file.'''
@@ -442,7 +477,6 @@ class LogWatcher(object):
         except Exception, e:
             print "Failed to read %s (%s)" % (conf, e)
         return None
-
 
     def getPluginConf(self, plugin):
         '''Read plugin config from conf file.'''
@@ -510,6 +544,8 @@ class LogWatcher(object):
                               "prime",
                               self.notify_schedule,
                               self.graphite_server,
+                              self.graphite_port,
+                              self.metric_format,
                               self.debug)
                 met.send(float(val), 1)
                 self.total_metric_count += 1
@@ -529,6 +565,8 @@ class LogWatcher(object):
                                                      "qps",
                                                      self.notify_schedule,
                                                      self.graphite_server,
+                                                     self.graphite_port,
+                                                     self.metric_format,
                                                      self.debug)
             self.gmetric_brands[brand].send(float(self.brand_counts[brand]/seconds), 1)
             self.total_metric_count += 1
@@ -609,6 +647,8 @@ class LogWatcher(object):
                                                              "percent",
                                                              self.notify_schedule,
                                                              self.graphite_server,
+                                                             self.graphite_port,
+                                                             self.metric_format,
                                                              self.debug)
                         self.gmetric[rmetric_name].send(perc, 1)
                     self.total_metric_count += 1
@@ -634,6 +674,8 @@ class LogWatcher(object):
                                                              "percent",
                                                              self.notify_schedule,
                                                              self.graphite_server,
+                                                             self.graphite_port,
+                                                             self.metric_format,
                                                              self.debug)
                         self.gmetric[rmetric_name].send(perc, 1)
                     self.total_metric_count += 1
@@ -649,6 +691,8 @@ class LogWatcher(object):
                                                 "sum",
                                                 self.notify_schedule,
                                                 self.graphite_server,
+                                                self.graphite_port,
+                                                self.metric_format,
                                                 self.debug)
                 self.gmetric[smetric].send(self.metric_sums[smetric], 1)
             self.total_metric_count += 1
@@ -664,6 +708,8 @@ class LogWatcher(object):
                                                 "count",
                                                 self.notify_schedule,
                                                 self.graphite_server,
+                                                self.graphite_port,
+                                                self.metric_format,
                                                 self.debug)
                 self.gmetric[cmetric].send(self.metric_counts[cmetric], 1)
             self.total_metric_count += 1
@@ -685,6 +731,8 @@ class LogWatcher(object):
                                                 "expression",
                                                 self.notify_schedule,
                                                 self.graphite_server,
+                                                self.graphite_port,
+                                                self.metric_format,
                                                 self.debug)
                 self.gmetric[emetric].send(cvalue, 1)
             self.total_metric_count += 1
@@ -721,6 +769,8 @@ class LogWatcher(object):
                                                       "count",
                                                       self.notify_schedule,
                                                       self.graphite_server,
+                                                      self.graphite_port,
+                                                      self.metric_format,
                                                       self.debug)
                     self.gmetric[dmetric_b].send(self.metric_dists[dmetric][bucket], 1)
                 self.total_metric_count += 1
@@ -739,6 +789,8 @@ class LogWatcher(object):
                                                                "percent",
                                                                self.notify_schedule,
                                                                self.graphite_server,
+                                                               self.graphite_port,
+                                                               self.metric_format,
                                                                self.debug)
                     self.gmetric[dmetric_b+"_ratio"].send(perc, 1)
                 self.total_metric_count += 1
@@ -760,6 +812,8 @@ class LogWatcher(object):
                                                 "count",
                                                 self.notify_schedule,
                                                 self.graphite_server,
+                                                self.graphite_port,
+                                                self.metric_format,
                                                 self.debug)
                     self.gmetric[pmn].send(pmetrics[pmetric], 1)
                 self.total_metric_count += 1
@@ -768,13 +822,15 @@ class LogWatcher(object):
         self.gmetric["NEW_METRICS"].send(self.new_metric_count, 1)
         self.total_metric_count += 3 # includes the next line
         self.gmetric["TOTAL_METRICS"].send(self.total_metric_count, 1)
+
         if self.graphite_server:
-            buffer = ""
-            for m in self.gmetric:
-                buffer += "%s\n" % self.gmetric[m].pop()
-            for m in self.gmetric_brands:
-                buffer += "%s\n" % self.gmetric_brands[m].pop()
-            sendMetrics(buffer, self.graphite_server)
+            metric_buffer = ""
+            for metric in self.gmetric:
+                metric_buffer += "%s\n" % self.gmetric[metric].pop()
+            for metric in self.gmetric_brands:
+                metric_buffer += "%s\n" % self.gmetric_brands[metric].pop()
+
+            sendMetrics(metric_buffer, self.graphite_server, self.graphite_port)
 
         # after sending batch, stop the timer
         self.notify_time = time.time() - self.notify_time_start
@@ -1096,11 +1152,9 @@ class LogWatcher(object):
 def procdaemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
     '''Daemonize this thing.'''
 
-    print "trying to daemonize"
     # Do first fork.
     try:
         pid = os.fork()
-        print "fork 1"
         if pid > 0:
             sys.exit(0) # Exit first parent.
     except OSError, e:
@@ -1115,7 +1169,6 @@ def procdaemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
     # Do second fork.
     try:
         pid = os.fork()
-        print "fork 2"
         if pid > 0:
             sys.exit(0) # Exit second parent.
     except OSError, e:
@@ -1123,7 +1176,6 @@ def procdaemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
         sys.exit(1)
 
     # Now I am a daemon!
-    print "Now daemon"
 
     # Redirect standard file descriptors.
     si = file(stdin, 'r')
@@ -1132,7 +1184,7 @@ def procdaemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
     os.dup2(si.fileno(), sys.stdin.fileno())
     os.dup2(so.fileno(), sys.stdout.fileno())
     os.dup2(se.fileno(), sys.stderr.fileno())
-    print "shouldn't see this"
+    print "Logwatcher running in daemon mode..."
 
 # FIXME: Why does this need a second arg?
 def handle_signal(signum, frame):
@@ -1173,7 +1225,6 @@ def parse_args():
                      default=0)
     pap.add_argument('-G',
                      '--use-graphite',
-                     dest='use_graphite',
                      action='store_true',
                      help='Use graphite, find server in /etc/graphite.conf.')
     pap.add_argument('-g',
@@ -1184,6 +1235,19 @@ def parse_args():
                      '--distinguisher',
                      help='Use the given string in the metric names',
                      default=None)
+    pap.add_argument('-l',
+                     '--daemon-log',
+                     help='log file to write to in daemon mode.i Useful for '
+                     'debugging.',
+                     default='/dev/null')
+    pap.add_argument('-m',
+                     '--metric-format',
+                     help='Metric formatting to use. "ctg" or "trp".',
+                     default="ctg")
+    pap.add_argument('-P',
+                     '--graphite-port',
+                     help='The port number to use for graphite.',
+                     default=2003)
     pap.add_argument('-p',
                      '--pidfile',
                      help='Store the PID in the given file',
@@ -1231,17 +1295,20 @@ def main():
         print CODE_VERSION
         sys.exit(0)
 
-    lw = LogWatcher(args.pidfile,
-                    args.daemonize,
-                    args.config,
-                    args.distinguisher,
-                    args.debug,
-                    args.quit,
-                    args.beginning,
-                    args.testconfig,
-                    args.graphite_server,
-                    args.use_graphite,
-                    args.prefix_root)
+    LogWatcher(args.pidfile,
+               args.daemonize,
+               args.daemon_log,
+               args.config,
+               args.distinguisher,
+               args.debug,
+               args.quit,
+               args.beginning,
+               args.testconfig,
+               args.graphite_server,
+               args.graphite_port,
+               args.use_graphite,
+               args.prefix_root,
+               args.metric_format)
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_signal)
