@@ -19,7 +19,8 @@ import re
 import sys
 import socket
 
-code_version = "$Id: gmetriclib.py 173790 2012-06-29 23:00:44Z wil $"
+# FIXME: This needs to be automated and become graphtie compatible
+CODE_VERSION = "$Id: gmetriclib.py 173790 2012-06-29 23:00:44Z wil $"
 
 
 class gMetric:
