@@ -23,9 +23,11 @@ import sys
 import atexit
 import ConfigParser
 import signal
-import argparse
+import logging
 
+# FIXME: This needs to be automated and become graphtie compatible
 CODE_VERSION = "$Id: logwatcher.py 233274 2014-06-23 23:20:52Z heitritterw $"
+LOG = logging.getLogger(__name__)
 
 class LogWatcher(object):
     '''Main logwatcher class.'''
@@ -112,9 +114,9 @@ class LogWatcher(object):
 
         if self.getPID() < 1:
             if self.daemonize:
-                procdaemonize(self.daemon_log,
-                              self.daemon_log,
-                              self.daemon_log)
+                self.lw_daemonize(self.daemon_log,
+                                  self.daemon_log,
+                                  self.daemon_log)
 
         if self.lockPID() == 0:
             print "Pidfile found"
@@ -135,9 +137,10 @@ class LogWatcher(object):
         self.brand_counts = {}
 
         if self.graphite_server:
-            from graphitelib import gMetric
+            from logwatcher.graphitelib import gMetric
+            from logwatcher.graphitelib import sendMetrics
         else:
-            from gmetriclib import gMetric
+            from logwatcher.gmetriclib import gMetric
 
         self.gmetric["Q"] = gMetric("float",
                                     "%sQueries" % self.prefix,
@@ -273,11 +276,12 @@ class LogWatcher(object):
         self.readConfig()
 
     def readConfig(self):
-        if self.debug:
-            print >> sys.stderr, "DEBUG: readconfig() called"
+        '''Read in logwatcehr config files.'''
+
+        LOG.debug('readconfig() called')
         sec = "logwatcher"
 
-        if self.configfile == None:
+        if self.configfile is None:
             return 0
         try:
             cp = ConfigParser.ConfigParser()
@@ -291,7 +295,7 @@ class LogWatcher(object):
                     pass
 
             # "except -> pass" for those that come in via commandline
-            if self.pidfile==None:
+            if self.pidfile is None:
                 try:
                     self.pidfile = cp.get(sec, "pidfile")
                 except:
@@ -307,7 +311,7 @@ class LogWatcher(object):
                 if os.path.exists(self.plugin_dir):
                     sys.path.append(self.plugin_dir)
                 else:
-                    print >> sys.stderr, "ERROR: %s does not exist" % self.plugin_dir
+                    LOG.error('ERROR: %s does not exist' % self.plugin_dir)
             else:
                 for ppath in self.plugin_paths:
                     if os.path.exists(ppath):
@@ -320,7 +324,7 @@ class LogWatcher(object):
                 except:
                     pass
 
-            print >> sys.stderr, "Loading plugins: %s" % self.plugin_list
+            LOG.info('Loading plugins: %s' % self.plugin_list)
             try:
                 for plugin in self.plugin_list:
                     print >> sys.stderr, "Loading plugin: %s" % (plugin)
@@ -330,8 +334,8 @@ class LogWatcher(object):
                     cls = getattr(mod, plugin)
                     # create an instance of the class
                     self.plugins.append(cls(self.debug, self.getPluginConf(plugin)))
-            except Exception, e:
-                print >> sys.stderr, "Failed to load plugin: %s (%s)" % (Exception, e)
+            except Exception as ex:
+                LOG.error('Failed to load plugin: {0} ({1})'.format(Exception, ex))
                 sys.exit(4) # should it be this serious?
 
             import string
@@ -396,13 +400,13 @@ class LogWatcher(object):
                     try:
                         self.regex[metric] = re.compile(cp.get(sec, "metric_%s_regex" % metric))
                     except:
-                        print "ERROR: Failed to find metric_%s_regex!" % metric
+                        LOG.error('ERROR: Failed to find metric_{0}_regex!'.format(metric))
                         # remove it after we leave the loop
                         to_remove.append(metric)
                 for rem in to_remove:
                     self.metrics_sum_list.remove(rem)
-            except Exception, e:
-                print "ERROR: error reading metrics_sum: %s" % e
+            except Exception as ex:
+                LOG.error('Error reading metrics_sum: {0}'.format(ex))
                 self.metrics_sum_list = ()
 
             # read in the calc metrics
@@ -412,7 +416,7 @@ class LogWatcher(object):
                     try:
                         self.metric_calc_expr[metric] = cp.get(sec, "metric_%s_expression" % metric)
                     except:
-                        print "ERROR: Failed to find metric_%s_regex!" % metric
+                        LOG.error('Failed to find metric_{0}_regex!'.format(metric))
                         self.metrics_calc_list.remove(metric)
             except:
                 self.metrics_calc_list = ()
@@ -425,8 +429,8 @@ class LogWatcher(object):
                         self.metric_dist_bucketsize[metric] = int(cp.get(sec, "metric_%s_bucket_size" % metric))
                         self.metric_dist_bucketcount[metric] = int(cp.get(sec, "metric_%s_bucket_count" % metric))
                         self.regex[metric] = re.compile(cp.get(sec, "metric_%s_regex" % metric))
-                    except Exception, e:
-                        print "ERROR: Failed to set up metric_%s_regex! (%s)" % (metric, e)
+                    except Exception as ex:
+                        LOG.error('ERROR: Failed to set up metric_{0}_regex!  ({1})'.format(metric, ex))
                         self.metrics_dist_list.remove(metric)
             except:
                 self.metrics_dist_list = ()
@@ -446,17 +450,21 @@ class LogWatcher(object):
 
             # FIXME: need some error handling for ratios that don't exist
 
-        except Exception, e:
-            print "failed to parse config file '%s'" % self.configfile
-            print "The following options are required:"
-            print " log_name_format"
-            print " sla_ms"
-            print " processing_time_regex"
-            print " use_brand"
-            print " brand_regex"
-            print " metrics_count"
-            print "    metric_<metric_name>_regex for any metric listed in metrics_count"
-            print "Root error: %s" % e
+        except Exception as ex:
+            req_options = [
+                'log_name_format',
+                'sla_ms',
+                'processing_time_regex',
+                'use_brand',
+                'brand_regex',
+                'metrics_count',
+                '    metric_<metric_name>_regex for any metric listed in metrics_count',
+            ]
+            LOG.error('failed to parse config file: {0}'.format(self.configfile))
+            LOG.error('The following options are required:')
+            for req in req_options:
+                LOG.error(' {0}'.format(req))
+            LOG.error('Root error: {0}'.format(ex))
             sys.exit(1)
         if self.testconfig:
             self.readTestConfig()
@@ -472,19 +480,18 @@ class LogWatcher(object):
         try:
             cp = ConfigParser.ConfigParser()
             cp.read(conf)
-            self.graphite_server=cp.get(sec, "server")
+            self.graphite_server = cp.get(sec, "server")
             return self.graphite_server
-        except Exception, e:
-            print "Failed to read %s (%s)" % (conf, e)
+        except Exception as ex:
+            LOG.error("Failed to read {0} ({1})".format(conf, ex))
         return None
 
     def getPluginConf(self, plugin):
         '''Read plugin config from conf file.'''
 
-        if self.debug:
-            print >> sys.stderr, "DEBUG: getPluginConf(%s) called" % plugin
+        LOG.debug('getPluginConf({0}) called.'.format(plugin))
 
-        if self.configfile == None:
+        if self.configfile is None:
             return 0
         try:
             cp = ConfigParser.ConfigParser()
@@ -495,6 +502,7 @@ class LogWatcher(object):
 
     def lockPID(self):
         '''Write the PID file.'''
+
         pid = self.getPID()
         if pid == -1: # not using pidfile
             return 1
@@ -505,7 +513,7 @@ class LogWatcher(object):
             myf.close()
             return 1
         else:
-            print "PID is %d" % pid
+            LOG.info('PID is {0}'.format(pid))
             return 0
 
         if os.path.exists(self.pidfile):
@@ -517,7 +525,7 @@ class LogWatcher(object):
         try:
             os.unlink(self.pidfile)
         except:
-            print "unable to unlink pidfile!"
+            LOG.warn('unable to unlink pidfile! {0}'.format(self.pidfile))
 
     def getPID(self):
         '''Return the contents of the PID file if it exists.'''
@@ -533,8 +541,15 @@ class LogWatcher(object):
             return 0
 
     def prime_metrics(self):
-        '''Dunno what this is supposed to do. gMetric is unknown in this
-        context.'''
+        '''Unknown.'''
+
+        # FIXME: Dunno what this is supposed to do. gMetric was unknown in this
+        # context until i added this.
+        if self.graphite_server:
+            from logwatcher.graphitelib import gMetric
+            from logwatcher.graphitelib import sendMetrics
+        else:
+            from logwatcher.gmetriclib import gMetric
 
         for pair in self.metrics_prime_list:
             try:
@@ -549,19 +564,21 @@ class LogWatcher(object):
                               self.debug)
                 met.send(float(val), 1)
                 self.total_metric_count += 1
-            except Exception, e:
-                print >> sys.stderr, "Failed to send prime metric %s (%s)" % (pair, e)
+            except Exception as ex:
+                print >> sys.stderr, "Failed to send prime metric %s (%s)" % (pair, ex)
 
     def notifybrand(self, brand, seconds):
+
         if self.graphite_server:
-            from graphitelib import gMetric
+            from logwatcher.graphitelib import gMetric
+            from logwatcher.graphitelib import sendMetrics
         else:
-            from gmetriclib import gMetric
+            from logwatcher.gmetriclib import gMetric
 
         try:
             if not self.gmetric_brands.has_key(brand):
                 self.gmetric_brands[brand] = gMetric("float",
-                                                     "%sQPS_%s" % (self.prefix,brand),
+                                                     "%sQPS_%s" % (self.prefix, brand),
                                                      "qps",
                                                      self.notify_schedule,
                                                      self.graphite_server,
@@ -570,17 +587,17 @@ class LogWatcher(object):
                                                      self.debug)
             self.gmetric_brands[brand].send(float(self.brand_counts[brand]/seconds), 1)
             self.total_metric_count += 1
-        except Exception, e:
-            print "couldn't notify for brand %s (%s)" % (brand, e)
+        except Exception as ex:
+            LOG.warn("Couldn't notify for brand {0} ({1})".format(brand, ex))
 
     def notify(self, seconds):
         '''Send metrics.'''
 
         if self.graphite_server:
-            from graphitelib import gMetric
-            from graphitelib import sendMetrics
+            from logwatcher.graphitelib import gMetric
+            from logwatcher.graphitelib import sendMetrics
         else:
-            from gmetriclib import gMetric
+            from logwatcher.gmetriclib import gMetric
 
         self.notify_time_start = time.time()
         #print time.strftime("%H:%M:%S")
@@ -682,7 +699,7 @@ class LogWatcher(object):
 
         # send smetrics
         for smetric in self.metric_sums.keys():
-            #print "DEBUG: sending %.2f" % self.metric_sums[smetric]
+            LOG.debug('sending {:.2f}'.format(self.metric_sums[smetric]))
             try:
                 self.gmetric[smetric].send(self.metric_sums[smetric], 1)
             except: #sketchy
@@ -699,7 +716,7 @@ class LogWatcher(object):
 
         # send cmetrics
         for cmetric in self.metric_counts.keys():
-            #print "DEBUG: sending %.2f" % self.metric_counts[cmetric]
+            LOG.debug('sending {:.2f}'.format(self.metric_counts[cmetric]))
             try:
                 self.gmetric[cmetric].send(self.metric_counts[cmetric], 1)
             except: #sketchy
@@ -991,11 +1008,11 @@ class LogWatcher(object):
                 print >> sys.stderr, "calculate(%s)" % self.parse_expression(expression)
             value = eval(self.parse_expression(expression))
         except ZeroDivisionError, e:
-            #print "Division by zero in calculate(%s)" % expression
+            LOG.warn('Division by zero in calculate({0})'.format(expression))
             value = 0
-        except Exception, e:
+        except Exception as ex:
             value = -1
-            print >> sys.stderr, "Exception in calculate(): %s (expression: '%s')" % (e, expression)
+            LOG.error("Exception in calculate(): %s (expression: '%s')" % (ex, expression))
         return value
 
     def watch(self):
@@ -1149,167 +1166,40 @@ class LogWatcher(object):
             self.log_time += time.time() - self.log_time_start
 
 
-def procdaemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
-    '''Daemonize this thing.'''
+    def lw_daemonize(self, stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
+        '''Daemonize this thing.'''
 
-    # Do first fork.
-    try:
-        pid = os.fork()
-        if pid > 0:
-            sys.exit(0) # Exit first parent.
-    except OSError, e:
-        sys.stderr.write("fork #1 failed: (%d) %s\n" % (e.errno, e.strerror))
-        sys.exit(1)
+        LOG.info('Setting up daemon...')
+        # Do first fork.
+        try:
+            pid = os.fork()
+            if pid > 0:
+                sys.exit(0) # Exit first parent.
+        except OSError as ex:
+            LOG.error('fork #1 failed: (%d) %s' % (ex.errno, ex.strerror))
+            sys.exit(1)
 
-    # Decouple from parent environment.
-    os.chdir("/")
-    os.umask(0)
-    os.setsid()
+        # Decouple from parent environment.
+        os.chdir('/')
+        os.umask(0)
+        os.setsid()
 
-    # Do second fork.
-    try:
-        pid = os.fork()
-        if pid > 0:
-            sys.exit(0) # Exit second parent.
-    except OSError, e:
-        sys.stderr.write("fork #2 failed: (%d) %s\n" % (e.errno, e.strerror))
-        sys.exit(1)
+        # Do second fork.
+        try:
+            pid = os.fork()
+            if pid > 0:
+                sys.exit(0) # Exit second parent.
+        except OSError as ex:
+            LOG.error('fork #2 failed: (%d) %s' % (ex.errno, ex.strerror))
+            sys.exit(1)
 
-    # Now I am a daemon!
+        # Now I am a daemon!
 
-    # Redirect standard file descriptors.
-    si = file(stdin, 'r')
-    so = file(stdout, 'a+')
-    se = file(stderr, 'a+', 0)
-    os.dup2(si.fileno(), sys.stdin.fileno())
-    os.dup2(so.fileno(), sys.stdout.fileno())
-    os.dup2(se.fileno(), sys.stderr.fileno())
-    print "Logwatcher running in daemon mode..."
-
-# FIXME: Why does this need a second arg?
-def handle_signal(signum, frame):
-    '''Exit on a given signal number.'''
-
-    print "\nLogWatcher killed"
-    sys.exit(signum)
-
-def parse_args():
-    '''Parse all the command line arguments.'''
-
-    help_desc = '''
-    Watch logs for configured metrics and send them to graphite.
-
-    >>> logwatcher.py -D -V -c /app/logwatcher/conf/logwatcher.ini -b -g graphite
-    readlines()
-    '''
-
-    pap = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
-                                  description=help_desc)
-
-    pap.add_argument('-b',
-                     '--beginning',
-                     action='store_true',
-                     help='Read the log from the beginning (useful with -q)')
-    pap.add_argument('-c',
-                     '--config',
-                     help='Use the given configuration file',
-                     default=None)
-    pap.add_argument('-d',
-                     '--daemonize',
-                     action='store_true',
-                     help="Run in the background.",
-                     default=0)
-    pap.add_argument('-D',
-                     '--debug',
-                     help="Don't send metrics, just print them.",
-                     default=0)
-    pap.add_argument('-G',
-                     '--use-graphite',
-                     action='store_true',
-                     help='Use graphite, find server in /etc/graphite.conf.')
-    pap.add_argument('-g',
-                     '--graphite-server',
-                     help='Use graphite, with server GRAPHITE_SERVER.',
-                     default=None)
-    pap.add_argument('-i',
-                     '--distinguisher',
-                     help='Use the given string in the metric names',
-                     default=None)
-    pap.add_argument('-l',
-                     '--daemon-log',
-                     help='log file to write to in daemon mode.i Useful for '
-                     'debugging.',
-                     default='/dev/null')
-    pap.add_argument('-m',
-                     '--metric-format',
-                     help='Metric formatting to use. "ctg" or "trp".',
-                     default="ctg")
-    pap.add_argument('-P',
-                     '--graphite-port',
-                     help='The port number to use for graphite.',
-                     default=2003)
-    pap.add_argument('-p',
-                     '--pidfile',
-                     help='Store the PID in the given file',
-                     default=None)
-    pap.add_argument('-R',
-                     '--prefix-root',
-                     dest='prefix_root',
-                     help='The prefix for all logwatcher metrics.',
-                     default='LW_')
-    pap.add_argument('-q',
-                     '--quit',
-                     action='store_true',
-                     help="Quit after sending metrics (useful with -D).")
-    pap.add_argument('-t',
-                     '--testconfig',
-                     action='store_true',
-                     help='Read overrides from the [test] section of the '
-                     'configuration file')
-    pap.add_argument('-V',
-                     '--verbose',
-                     action='store_true',
-                     help="Print gmetric commands as they're sent. Disables -D.")
-    pap.add_argument('-v',
-                     '--version',
-                     action='store_true',
-                     help="Print the version.")
-
-    return pap.parse_args()
-
-def main():
-    '''Do all the things.'''
-
-    # parse the args
-    args = parse_args()
-
-    # FIXME: convert to true/false or one option with levels.
-    # debug = 0
-    # for opt, arg in opts:
-    #     if opt in ("-D", "--debug"):
-    #         debug = 1
-    #     if opt in ("-V", "--verbose"):
-    #         debug = 2
-
-    if args.version:
-        print CODE_VERSION
-        sys.exit(0)
-
-    LogWatcher(args.pidfile,
-               args.daemonize,
-               args.daemon_log,
-               args.config,
-               args.distinguisher,
-               args.debug,
-               args.quit,
-               args.beginning,
-               args.testconfig,
-               args.graphite_server,
-               args.graphite_port,
-               args.use_graphite,
-               args.prefix_root,
-               args.metric_format)
-
-if __name__ == "__main__":
-    signal.signal(signal.SIGINT, handle_signal)
-    main()
+        # Redirect standard file descriptors.
+        si = file(stdin, 'r')
+        so = file(stdout, 'a+')
+        se = file(stderr, 'a+', 0)
+        os.dup2(si.fileno(), sys.stdin.fileno())
+        os.dup2(so.fileno(), sys.stdout.fileno())
+        os.dup2(se.fileno(), sys.stderr.fileno())
+        LOG.info('Logwatcher running in daemon mode...')

@@ -18,10 +18,11 @@ import os
 import re
 import sys
 import socket
+import logging
 
 # FIXME: This needs to be automated and become graphtie compatible
 CODE_VERSION = "$Id: gmetriclib.py 173790 2012-06-29 23:00:44Z wil $"
-
+LOG = logging.getLogger(__name__)
 
 class gMetric:
 
@@ -92,7 +93,8 @@ class gMetric:
 
 def sendMetrics(data, server, port):
 
-    print "SENDING: %s" % data
+    for metric in [y for y in (x.strip() for x in data.splitlines()) if y]:
+        LOG.info('SENDING: {0}'.format(metric))
 
     try:
         sock = socket.socket()
