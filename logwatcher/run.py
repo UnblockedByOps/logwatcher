@@ -1,6 +1,6 @@
 #!/usr/local/bin/python2.7
 #!/bin/env python
-
+#
 #  Copyright 2015 CityGrid Media, LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +15,12 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-
 import sys
 import signal
 import argparse
 import logging
 from logwatcher.lw import LogWatcher
+from logwatcher.common import read_graphite_conf
 
 # FIXME: This needs to be automated and become graphtie compatible
 CODE_VERSION = "$Id: logwatcher.py 233274 2014-06-23 23:20:52Z heitritterw $"
@@ -77,13 +77,18 @@ def parse_args():
                      default=None)
     pap.add_argument('-l',
                      '--daemon-log',
-                     help='log file to write to in daemon mode.i Useful for '
+                     help='Log file to write to in daemon mode. Useful for '
                      'debugging.',
-                     default='/dev/null')
+                     default=None)
     pap.add_argument('-m',
                      '--metric-format',
                      help='Metric formatting to use. "ctg" or "trp".',
                      default="ctg")
+    pap.add_argument('-o',
+                     '--console-log',
+                     help='Write a console log in daemon mode. Useful for '
+                     'debugging.',
+                     default='/dev/null')
     pap.add_argument('-P',
                      '--graphite-port',
                      help='The port number to use for graphite.',
@@ -131,7 +136,10 @@ def main():
     #     if opt in ("-V", "--verbose"):
     #         debug = 2
 
-    log_level = logging.INFO
+    if args.debug == 0:
+        log_level = logging.INFO
+    else:
+        log_level = logging.DEBUG
 
     root = logging.getLogger()
     root.setLevel(log_level)
@@ -139,11 +147,13 @@ def main():
     console = logging.StreamHandler(sys.stdout)
     console.setLevel(log_level)
     formatter = logging.Formatter('%(asctime)s - %(levelname)-8s- %(message)s')
-    logger = logging.getLogger('logwatcher')
-    hdlr = logging.FileHandler('/app/logwatcher/log/logwatcher.log')
-    hdlr.setFormatter(formatter)
-    logger.addHandler(hdlr)
-    logger.setLevel(logging.INFO)
+    # Log to a file
+    if args.daemon_log:
+        logger = logging.getLogger('logwatcher')
+        hdlr = logging.FileHandler(args.daemon_log)
+        hdlr.setFormatter(formatter)
+        logger.addHandler(hdlr)
+        logger.setLevel(log_level)
     console.setFormatter(formatter)
     root.addHandler(console)
 
@@ -151,9 +161,24 @@ def main():
         LOG.info(CODE_VERSION)
         sys.exit(0)
 
-    LogWatcher(args.pidfile,
+    if args.use_graphite and not args.graphite_server:
+        args.graphite_server = read_graphite_conf()
+        if not args.graphite_server:
+            LOG.error('Failed to set graphite server from config file. Using gmetric.')
+        else:
+            args.use_graphite = True
+
+    if args.graphite_server:
+        from logwatcher.graphitelib import Gmetric
+        LOG.info('Using Gmetric Graphite.')
+    else:
+        from logwatcher.gmetriclib import Gmetric
+        LOG.info('Using Gmetric Gmond.')
+
+    LogWatcher(Gmetric,
+               args.pidfile,
                args.daemonize,
-               args.daemon_log,
+               args.console_log,
                args.config,
                args.distinguisher,
                args.debug,

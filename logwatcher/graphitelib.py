@@ -1,3 +1,4 @@
+'''Gmetric implimentation for graphite.'''
 #  Copyright 2015 CityGrid Media, LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +15,16 @@
 #
 
 import time
-import os
-import re
-import sys
 import socket
 import logging
+from logwatcher.common import send_to_graphite
 
 # FIXME: This needs to be automated and become graphtie compatible
 CODE_VERSION = "$Id: gmetriclib.py 173790 2012-06-29 23:00:44Z wil $"
 LOG = logging.getLogger(__name__)
 
-class gMetric:
+class Gmetric(object):
+    '''Send metrics to graphite.'''
 
     def __init__(self,
                  metric_type,
@@ -40,7 +40,7 @@ class gMetric:
         self.metric_format = metric_format
         self.name = "%s.%s" % (self.gen_metric_path(), name)
         self.units = units
-        # FIXME: Guessing this is for compatability with gmond gMetric
+        # FIXME: Guessing this is for compatability with gmond Gmetric
         self.maximum = notused1
         self.debug = debug # 0 == send, 1 == print, 2 == print+send
         self.__buffer = ""
@@ -87,33 +87,5 @@ class gMetric:
             self.__buffer = ""
             return True
 
-        if sendMetrics(self.__buffer, self.server, self.port):
+        if send_to_graphite(self.__buffer, self.server, self.port):
             self.__buffer = ""
-
-
-def sendMetrics(data, server, port):
-
-    for metric in [y for y in (x.strip() for x in data.splitlines()) if y]:
-        LOG.info('SENDING: {0}'.format(metric))
-
-    try:
-        sock = socket.socket()
-        sock.connect((server, int(port)))
-    except Exception as ex:
-        print >> sys.stderr, "Failed to connect to %s:%s! (%s)" % (server,
-                                                                   port,
-                                                                   ex)
-        return False
-
-    try:
-        sock.sendall(data+"\n")
-    except Exception, e:
-        print >> sys.stderr, "Failed to send data to %s:%s! (%s)" % (server, port, e)
-        print >> sys.stderr, data
-
-    try:
-        sock.close()
-        return True
-    except:
-        print >> sys.stderr, "Failed to close socket"
-    return False
