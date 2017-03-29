@@ -22,12 +22,25 @@
 # chkconfig: 3 99 00
 # description: logwatcher.py - report on access logs on the fly
 
+# Configure these in /etc/sysconfig/logwatcher to override.
+daemon_args=""
+pkg_dir="/usr/local/lib/python2.7/site-packages/logwatcher"
+py_bin="/usr/local/bin/python2.7"
+config_dir="/app/logwatcher/conf"
+lw_user=root
 
-# Configure these
-bin_dir="/usr/lib/python2.7/site-packages"
-config_dir="/app/logwatcher/etc"
-lw="python2.7 ${bin_dir}/logwatcher.py"
-lw_user=csweb
+if [ -f /etc/sysconfig/logwatcher ] ; then
+    . /etc/sysconfig/logwatcher
+fi
+
+lw="${py_bin} ${pkg_dir}/run.py ${daemon_args}"
+echo "Starting : ${lw}"
+
+# GMOND Style
+# lw="python2.7 ${pkg_dir}/run.py"
+# Basic graphite
+# lw="python2.7 ${pkg_dir}/run.py -g graphite"
+#lw="/usr/local/bin/python2.7 ${pkg_dir}/run.py -g graphite -P 3003 -R 'LW.' -m trp"
 
 # initialize other variables
 class=`hostname | sed 's/^.......\([a-z]*\)[0-9]*$/\1/'`
