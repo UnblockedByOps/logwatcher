@@ -19,6 +19,7 @@ import sys
 import signal
 import argparse
 import logging
+from logging.handlers import TimedRotatingFileHandler
 from logwatcher.lw import LogWatcher
 from logwatcher.common import read_graphite_conf
 
@@ -150,7 +151,12 @@ def main():
     # Log to a file
     if args.daemon_log:
         logger = logging.getLogger('logwatcher')
-        hdlr = logging.FileHandler(args.daemon_log)
+        # hdlr = logging.FileHandler(args.daemon_log)
+        # FIXME: Make the time interval configurable
+        hdlr = TimedRotatingFileHandler(args.daemon_log,
+                                        when='D',
+                                        interval=1,
+                                        backupCount=7)
         hdlr.setFormatter(formatter)
         logger.addHandler(hdlr)
         logger.setLevel(log_level)
