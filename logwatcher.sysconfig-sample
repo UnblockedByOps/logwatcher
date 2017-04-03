@@ -1,0 +1,1 @@
+daemon_args="-l /app/logwatcher/log/logwatcher.log -g graphite -P 3003 -R 'LW.' -m trp"
