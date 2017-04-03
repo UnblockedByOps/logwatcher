@@ -1,3 +1,4 @@
+'''Gmetric implimentation for gmond.'''
 #  Copyright 2015 CityGrid Media, LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,8 +23,8 @@ import logging
 CODE_VERSION = "$Id: gmetriclib.py 173790 2012-06-29 23:00:44Z wil $"
 LOG = logging.getLogger(__name__)
 
-class gMetric:
-    '''Gmond implimentation of gmetric.'''
+class Gmetric(object):
+    '''Send metrics to gmond.'''
 
     def __init__(self,
                  metric_type,
@@ -45,10 +46,10 @@ class gMetric:
         self.version = 2
 
         if mcast is None:
-            self.get_channel()
+            self.get_mc_channel()
 
     def send(self, value, float_num=0):
-        '''Send metrics to gmond.'''
+        '''Send the metric.'''
 
         if float_num:
             value = "%.3f" % value
@@ -73,29 +74,26 @@ class gMetric:
         else:
             cmd = cmd_v3
 
+        LOG.debug('COMMAND: {0}'.format(cmd))
         if self.debug == 1:
             ret = 0
-            print cmd
         else:
-            if self.debug == 2:
-                print cmd
             ret = os.system(cmd)
 
         if ret != 0:
-            print "ERROR running "+cmd
-            print "ERROR switching to ganglia version 3"
+            LOG.warn('There was an error running: {0} Switching to ganglia '
+                     'version 3...'.format(cmd))
             if self.version == 2:
                 self.version = 3
-                if self.debug == 1:
-                    print cmd_v3
+                LOG.debug('COMMAND: {0}'.format(cmd_v3))
                 ret = os.system(cmd_v3)
                 if ret != 0:
-                    print "ERROR version 3 fails as well!"
+                    LOG.error('Version 3 fails as well!')
                 else:
-                    print "INFO version 3 works"
+                    LOG.info('INFO version 3 works.')
 
-    def get_channel(self):
-        '''Determine multicast channel to send metrics to.'''
+    def get_mc_channel(self):
+        '''Get multicast channel from config file.'''
 
         conf = "/etc/gmond.conf"
         if os.path.exists(conf):
@@ -114,8 +112,8 @@ class gMetric:
                 conf_fd.close()
                 return 1
             except:
-                print "ERROR: Couldn't find mcast_channel in %s" % conf
+                LOG.error("Couldn't find mcast_channel in conf: {0}".format(conf))
                 sys.exit(9)
         else:
-            print "ERROR: %s does not exist" % conf
+            LOG.error('Conf does not exist: {0}'.format(conf))
             sys.exit(9)
